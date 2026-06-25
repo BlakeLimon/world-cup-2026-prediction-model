@@ -72,6 +72,12 @@ export function scoreMatrix(ratingA, ratingB, homeBonusA = 0, maxGoals = MAX_GOA
   return { matrix: buildMatrix(lambda, mu, DC_RHO, maxGoals), lambda, mu };
 }
 
+// Score matrix directly from two expected-goal rates — used by the attack/defense
+// (goals) model, which computes λ/μ from per-team attack & defense ratings.
+export function matrixFromLambdas(lambda, mu, maxGoals = MAX_GOALS) {
+  return buildMatrix(lambda, mu, DC_RHO, maxGoals);
+}
+
 // First-half score matrix. No dedicated 1H model exists, so we scale both
 // expected-goal rates by FIRST_HALF_GOAL_FRACTION. APPROXIMATION — not
 // validated against half-time data; treat first-half value flags with caution.
