@@ -49,14 +49,18 @@ for (const match of matches) {
   const r = evaluateMatch(match, ratings, { evMin, unmatched });
   if (!r) continue;
 
+  const badge = (row) =>
+    row.recommended ? "✅ VALUE" : row.value ? "· alt" : row.verdict === "outlier" ? "⚠ outlier" : "—";
+  const evCol = (ev) => `${(ev * 100 >= 0 ? "+" : "") + (ev * 100).toFixed(1) + "%"}`.padStart(7);
+
   const kickoff = new Date(r.kickoff).toLocaleString();
-  console.log(`\n  ${r.home} vs ${r.away}   (${kickoff}, ${r.bookCount} US books)`);
+  const venueStr = r.venue ? ` @ ${r.venue.stadium}` : "";
+  console.log(`\n  ${r.home} vs ${r.away}${venueStr}   (${kickoff}, ${r.bookCount} US books)`);
   console.log(
     `  ${"outcome".padEnd(16)} ${"model".padStart(6)} ${"fair".padStart(6)} ` +
       `${"mkt".padStart(6)} ${"best".padStart(7)} ${"book".padEnd(12)} ${"EV".padStart(7)}  verdict`
   );
   for (const row of r.rows) {
-    const verdict = row.verdict === "value" ? "✅ VALUE" : row.verdict === "outlier" ? "⚠ outlier" : "—";
     console.log(
       `  ${row.label.padEnd(16)} ` +
         `${(row.pModel * 100).toFixed(1).padStart(5)}% ` +
@@ -64,17 +68,8 @@ for (const match of matches) {
         `${(row.pMarket * 100).toFixed(1).padStart(5)}% ` +
         `${signSym(row.american).padStart(7)} ` +
         `${row.book.padEnd(12)} ` +
-        `${(row.ev * 100 >= 0 ? "+" : "") + (row.ev * 100).toFixed(1) + "%"}`.padStart(7) +
-        `  ${verdict}`
+        `${evCol(row.ev)}  ${badge(row)}`
     );
-    if (row.value)
-      recommendations.push({
-        match: `${r.home} vs ${r.away}`,
-        bet: row.label,
-        price: signSym(row.american),
-        book: row.book,
-        ev: row.ev,
-      });
   }
 
   // Spreads (goal handicaps) — only show the lines with a positive-EV signal.
@@ -82,7 +77,6 @@ for (const match of matches) {
   if (spreadShow.length) {
     console.log(`  ${"— spreads —".padStart(20)}`);
     for (const row of spreadShow) {
-      const verdict = row.verdict === "value" ? "✅ VALUE" : "⚠ outlier";
       console.log(
         `  ${row.label.padEnd(16)} ` +
           `${(row.pModel * 100).toFixed(1).padStart(5)}% ` +
@@ -90,19 +84,19 @@ for (const match of matches) {
           `${(row.pMarket * 100).toFixed(1).padStart(5)}% ` +
           `${signSym(row.american).padStart(7)} ` +
           `${row.book.padEnd(12)} ` +
-          `${(row.ev * 100 >= 0 ? "+" : "") + (row.ev * 100).toFixed(1) + "%"}`.padStart(7) +
-          `  ${verdict}`
+          `${evCol(row.ev)}  ${badge(row)}`
       );
-      if (row.value)
-        recommendations.push({
-          match: `${r.home} vs ${r.away}`,
-          bet: row.label,
-          price: signSym(row.american),
-          book: row.book,
-          ev: row.ev,
-        });
     }
   }
+
+  for (const rec of r.recommendations)
+    recommendations.push({
+      match: `${r.home} vs ${r.away}`,
+      bet: rec.label,
+      price: signSym(rec.american),
+      book: rec.book,
+      ev: rec.ev,
+    });
   shown++;
 }
 

@@ -35,13 +35,10 @@ async function buildPayload(evMin) {
   for (const match of matches) {
     const r = evaluateMatch(match, ratings, { evMin, unmatched });
     if (!r) continue;
-    for (const row of r.rows) {
-      row.fair = formatAmericanOdds(row.pModel);
-      if (row.value) valueCount++;
-    }
+    for (const row of r.rows) row.fair = formatAmericanOdds(row.pModel);
     // Only surface spread lines that carry a signal (keeps the table tight).
     r.spreadRows = (r.spreadRows || []).filter((s) => s.verdict !== "none");
-    for (const row of r.spreadRows) if (row.value) valueCount++;
+    valueCount += r.recommendations.length; // deduped: one bet per side
     out.push(r);
   }
   out.sort((a, b) => new Date(a.kickoff) - new Date(b.kickoff));
@@ -140,9 +137,11 @@ const PAGE = `<!doctype html>
   td.team,th.team { text-align:left; font-weight:600; }
   tr.value td { background:var(--greenbg); }
   tr.outlier td { background:var(--amberbg); }
+  tr.alt td { background:#13202b; }
   .verdict { font-weight:700; font-size:12px; }
   .verdict.value { color:var(--green); }
   .verdict.outlier { color:var(--amber); }
+  .verdict.alt { color:var(--muted); }
   .verdict.none { color:var(--muted); }
   .bar { display:inline-block; height:8px; border-radius:4px; background:var(--accent);
     vertical-align:middle; opacity:.55; }
@@ -247,7 +246,7 @@ function renderDates() {
   }
   document.getElementById('dates').innerHTML = dates.map(([k,iso])=>{
     const live = liveOn(k).length;
-    let v = 0; for (const mm of liveOn(k)) { for (const r of mm.rows) if (r.value) v++; for (const r of (mm.spreadRows||[])) if (r.value) v++; }
+    let v = 0; for (const mm of liveOn(k)) v += mm.recommendations.length;
     const n = live ? (v+' VB') : (loggedOn(k).length+' logged');
     return '<button class="daychip'+(k===selectedDate?' sel':'')+(live?'':' past')+'" data-k="'+k+'">'+dayLabel(iso)+'<span class="n">'+n+'</span></button>';
   }).join('') || '<span class="empty">No days available.</span>';
@@ -257,8 +256,8 @@ function renderDates() {
 
 function matchTable(m) {
   const row = (r, isSpread) => {
-    const cls = r.verdict;
-    const vlabel = cls==='value'?'✅ VALUE':cls==='outlier'?'⚠ outlier':'—';
+    const cls = r.recommended ? 'value' : r.value ? 'alt' : r.verdict;
+    const vlabel = r.recommended?'✅ VALUE':r.value?'· alt':cls==='outlier'?'⚠ outlier':'—';
     return '<tr class="'+cls+'">' +
       '<td class="team">'+r.label+'</td>' +
       '<td>'+fmtPct(r.pModel)+(isSpread?'':' <span class="bar" style="width:'+(r.pModel*42).toFixed(0)+'px"></span>')+'</td>' +
@@ -269,8 +268,9 @@ function matchTable(m) {
       '<td class="'+(r.ev>=0?'pos':'neg')+'">'+fmtEv(r.ev)+'</td>' +
       '<td class="team verdict '+cls+'">'+vlabel+'</td></tr>';
   };
+  const venueStr = m.venue ? ' · '+m.venue.stadium+(m.venue.altitudeM>1200?' ('+m.venue.altitudeM+'m)':'') : '';
   return '<div class="match"><h3><span>'+m.home+' vs '+m.away+'</span>' +
-    '<span class="when">'+when(m.kickoff)+' · '+m.bookCount+' books</span></h3>' +
+    '<span class="when">'+when(m.kickoff)+venueStr+' · '+m.bookCount+' books</span></h3>' +
     '<table><thead><tr>' +
     '<th class="team">Outcome</th><th>Model</th><th>Fair</th><th>Market</th>' +
     '<th>Best</th><th class="team">Book</th><th>EV</th><th class="team">Verdict</th>' +
@@ -303,10 +303,7 @@ function renderDay() {
   const logged = loggedOn(selectedDate);
 
   const picks = [];
-  for (const m of live) {
-    for (const r of m.rows) if (r.value) picks.push({...r, home:m.home, away:m.away});
-    for (const r of (m.spreadRows||[])) if (r.value) picks.push({...r, home:m.home, away:m.away});
-  }
+  for (const m of live) for (const r of m.recommendations) picks.push({...r, home:m.home, away:m.away});
   picks.sort((a,b)=>b.ev-a.ev);
   document.getElementById('picks').innerHTML = picks.length ? (
     '<div class="picks"><h2>⭐ '+picks.length+' value bet'+(picks.length>1?'s':'')+' · '+dayLabel(live[0].kickoff)+'</h2>' +

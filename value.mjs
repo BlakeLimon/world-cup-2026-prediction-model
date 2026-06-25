@@ -9,7 +9,15 @@ import {
   devig,
   evaluateBet,
 } from "./oddsmath.mjs";
-import { HOSTS, HOST_BONUS } from "./adjustments.mjs";
+import { matchAdjustments, venueOf } from "./adjustments.mjs";
+
+// Optional fixture → venue city map (the odds feed has no venue). Keyed by
+// "homeslug|awayslug". Populate data/wc-fixtures.json to light up stadium names
+// and venue-based adjustments (altitude). Missing entries are simply skipped.
+let FIXTURES = {};
+try {
+  FIXTURES = JSON.parse(readFileSync(new URL("./data/wc-fixtures.json", import.meta.url), "utf8")).fixtures || {};
+} catch { /* no fixtures map yet */ }
 
 export const SPORT = "soccer_fifa_world_cup";
 
@@ -104,10 +112,14 @@ export function evaluateMatch(match, ratings, { evMin = 0.02, unmatched } = {}) 
   if (!awayKey && unmatched) unmatched.add(away_team);
   if (!homeKey || !awayKey) return null;
 
-  // Host advantage: a host nation listed as home is assumed to be playing in
-  // its own country (venue isn't in the odds feed). No-op for everyone else.
-  const homeBonus = HOSTS.has(homeKey) ? HOST_BONUS : 0;
-  const p = matchProb(ratings[homeKey], ratings[awayKey], homeBonus);
+  // Resolve venue (if mapped) and apply situational adjustments (host, altitude).
+  const venueCity = FIXTURES[`${homeKey}|${awayKey}`] || null;
+  const venue = venueCity ? venueOf(venueCity) : null;
+  const adj = matchAdjustments({ homeKey, awayKey, venue });
+  const rA = ratings[homeKey] + adj.adjHome;
+  const rB = ratings[awayKey] + adj.adjAway;
+
+  const p = matchProb(rA, rB, 0);
   const outcomes = [
     { label: home_team, side: "home", pModel: p.winA },
     { label: "Draw", side: "draw", pModel: p.draw },
@@ -147,6 +159,7 @@ export function evaluateMatch(match, ratings, { evMin = 0.02, unmatched } = {}) 
     const trusted = pMarket >= TRUST_MIN && pMarket <= TRUST_MAX && edge <= EDGE_CAP;
     const value = positiveEv && trusted;
     rows.push({
+      market: "h2h",
       label: o.label,
       side: o.side,
       pModel: o.pModel,
@@ -161,8 +174,20 @@ export function evaluateMatch(match, ratings, { evMin = 0.02, unmatched } = {}) 
     });
   }
 
-  const { matrix } = scoreMatrix(ratings[homeKey], ratings[awayKey], homeBonus);
+  const { matrix } = scoreMatrix(rA, rB, 0);
   const spreadRows = evaluateSpreads(matrix, home_team, away_team, bookmakers, evMin);
+
+  // One recommendation per side (team / draw) across moneyline + spreads — keep
+  // the highest-EV bet so we never recommend two bets on the same team.
+  const bySide = new Map();
+  for (const r of [...rows, ...spreadRows]) {
+    if (!r.value) continue;
+    const prev = bySide.get(r.side);
+    if (!prev || r.ev > prev.ev) bySide.set(r.side, r);
+  }
+  for (const r of [...rows, ...spreadRows]) r.recommended = false;
+  const recommendations = [...bySide.values()].sort((a, b) => b.ev - a.ev);
+  for (const r of recommendations) r.recommended = true;
 
   return {
     eventId: id,
@@ -170,8 +195,11 @@ export function evaluateMatch(match, ratings, { evMin = 0.02, unmatched } = {}) 
     away: away_team,
     kickoff: match.commence_time,
     bookCount: bookmakers.length,
+    venue: venue ? { stadium: venue.stadium, city: venueCity, altitudeM: venue.altitudeM } : null,
+    adjustmentNotes: adj.notes,
     rows,
     spreadRows,
+    recommendations,
   };
 }
 

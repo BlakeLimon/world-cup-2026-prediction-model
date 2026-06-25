@@ -101,11 +101,10 @@ async function cmdLog() {
     if (!r) continue;
     // Don't log bets on matches that have already kicked off.
     if (new Date(r.kickoff).getTime() <= now) {
-      if (r.rows.some((x) => x.value) || (r.spreadRows || []).some((x) => x.value)) skippedStarted++;
+      if (r.recommendations.length) skippedStarted++;
       continue;
     }
-    for (const row of r.rows) if (row.value) logRow(r, row, "h2h");
-    for (const row of r.spreadRows || []) if (row.value) logRow(r, row, "spread");
+    for (const row of r.recommendations) logRow(r, row, row.market);
   }
 
   writeLog(log);

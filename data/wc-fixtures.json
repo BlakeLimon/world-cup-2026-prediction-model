@@ -1,0 +1,7 @@
+{
+  "_comment": "Fixture -> host-city map. Key is 'homeslug|awayslug' (model team slugs, e.g. 'ivory-coast', 'dr-congo'); value is a city key from data/venues.json (e.g. 'dallas', 'mexico city'). The odds feed has no venue, so populate this to show stadium names and enable altitude/travel/weather adjustments. Example entries below — replace with the real schedule.",
+  "fixtures": {
+    "mexico|south-africa": "mexico city",
+    "usa|paraguay": "los angeles"
+  }
+}
