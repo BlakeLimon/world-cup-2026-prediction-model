@@ -2,7 +2,7 @@
 // consensus, and evaluate each outcome for value with the trust guardrail.
 // Used by both compare.mjs (display) and track.mjs (logging/grading).
 import { readFileSync } from "node:fs";
-import { matchProb } from "./elo.mjs";
+import { matchProb, scoreMatrix, spreadProb } from "./elo.mjs";
 import {
   americanToDecimal,
   americanToImpliedProb,
@@ -71,7 +71,7 @@ export function resolveTeam(name, ratings) {
 
 // --- API calls -----------------------------------------------------------
 
-export async function fetchOdds({ apiKey, regions = "us", markets = "h2h" }) {
+export async function fetchOdds({ apiKey, regions = "us", markets = "h2h,spreads" }) {
   const url =
     `https://api.the-odds-api.com/v4/sports/${SPORT}/odds/` +
     `?apiKey=${apiKey}&regions=${regions}&markets=${markets}&oddsFormat=american`;
@@ -157,6 +157,9 @@ export function evaluateMatch(match, ratings, { evMin = 0.02, unmatched } = {}) 
     });
   }
 
+  const { matrix } = scoreMatrix(ratings[homeKey], ratings[awayKey], 0);
+  const spreadRows = evaluateSpreads(matrix, home_team, away_team, bookmakers, evMin);
+
   return {
     eventId: id,
     home: home_team,
@@ -164,5 +167,53 @@ export function evaluateMatch(match, ratings, { evMin = 0.02, unmatched } = {}) 
     kickoff: match.commence_time,
     bookCount: bookmakers.length,
     rows,
+    spreadRows,
   };
+}
+
+const fmtLine = (x) => (x > 0 ? "+" + x : "" + x);
+
+// Evaluate goal-handicap (spread) bets. Books quote different lines, so we
+// de-vig each book's own two sides at its line (rather than averaging across
+// books), evaluate the model's cover probability with push handling, and keep
+// the best +EV per (side, line). Returns rows shaped like the h2h rows, with
+// added `market`, `line`, and `push` fields.
+function evaluateSpreads(matrix, homeTeam, awayTeam, bookmakers, evMin) {
+  const byKey = new Map(); // `${side}|${line}` -> best-EV candidate
+  for (const bk of bookmakers) {
+    const mkt = bk.markets?.find((m) => m.key === "spreads");
+    if (!mkt) continue;
+    const ho = mkt.outcomes.find((o) => o.name === homeTeam);
+    const ao = mkt.outcomes.find((o) => o.name === awayTeam);
+    if (!ho || !ao || ho.point == null) continue;
+
+    const hp = ho.point; // home handicap line
+    const sp = spreadProb(matrix, hp);
+    const ih = americanToImpliedProb(ho.price), ia = americanToImpliedProb(ao.price);
+    const fairHome = ih / (ih + ia), fairAway = ia / (ih + ia);
+
+    const sides = [
+      { side: "home", label: `${homeTeam} ${fmtLine(hp)}`, line: hp, price: ho.price, pWin: sp.homeCover, pLose: sp.awayCover, fair: fairHome },
+      { side: "away", label: `${awayTeam} ${fmtLine(-hp)}`, line: -hp, price: ao.price, pWin: sp.awayCover, pLose: sp.homeCover, fair: fairAway },
+    ];
+    for (const s of sides) {
+      const decimal = americanToDecimal(s.price);
+      const pAdj = s.pWin / (s.pWin + s.pLose); // push-excluded, matches the de-vig
+      const edge = pAdj - s.fair;
+      const ev = s.pWin * (decimal - 1) - s.pLose; // push refunds stake → 0 profit
+      const positiveEv = edge > 0 && ev >= evMin;
+      const trusted = s.fair >= TRUST_MIN && s.fair <= TRUST_MAX && edge <= EDGE_CAP;
+      const value = positiveEv && trusted;
+      const cand = {
+        market: "spread", side: s.side, label: s.label, line: s.line,
+        pModel: pAdj, pMarket: s.fair, push: sp.push,
+        american: s.price, decimal, book: bk.title,
+        edge, ev, value, verdict: value ? "value" : positiveEv ? "outlier" : "none",
+      };
+      const key = `${s.side}|${s.line}`;
+      const prev = byKey.get(key);
+      if (!prev || cand.ev > prev.ev) byKey.set(key, cand);
+    }
+  }
+  return [...byKey.values()].sort((a, b) => b.ev - a.ev);
 }

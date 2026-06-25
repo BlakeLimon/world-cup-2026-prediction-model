@@ -64,47 +64,48 @@ async function cmdLog() {
     skippedStarted = 0,
     skippedDup = 0;
 
+  const logRow = (r, row, market) => {
+    const id = market === "spread" ? `${r.eventId}:spread:${row.side}:${row.line}` : `${r.eventId}:${row.side}`;
+    if (seen.has(id)) { skippedDup++; return; }
+    log.push({
+      id,
+      loggedAt: new Date().toISOString(),
+      eventId: r.eventId,
+      match: `${r.home} vs ${r.away}`,
+      home: r.home,
+      away: r.away,
+      kickoff: r.kickoff,
+      market,
+      bet: row.label,
+      side: row.side,
+      line: row.line ?? null,
+      priceAmerican: row.american,
+      priceDecimal: +row.decimal.toFixed(4),
+      book: row.book,
+      pModel: +row.pModel.toFixed(4),
+      pMarket: +row.pMarket.toFixed(4),
+      edge: +row.edge.toFixed(4),
+      ev: +row.ev.toFixed(4),
+      stake: STAKE,
+      status: "open",
+      result: null,
+      profit: null,
+      settledAt: null,
+    });
+    seen.add(id);
+    added++;
+  };
+
   for (const match of matches) {
     const r = evaluateMatch(match, ratings, {});
     if (!r) continue;
     // Don't log bets on matches that have already kicked off.
     if (new Date(r.kickoff).getTime() <= now) {
-      if (r.rows.some((row) => row.value)) skippedStarted++;
+      if (r.rows.some((x) => x.value) || (r.spreadRows || []).some((x) => x.value)) skippedStarted++;
       continue;
     }
-    for (const row of r.rows) {
-      if (!row.value) continue;
-      const id = `${r.eventId}:${row.side}`;
-      if (seen.has(id)) {
-        skippedDup++;
-        continue;
-      }
-      log.push({
-        id,
-        loggedAt: new Date().toISOString(),
-        eventId: r.eventId,
-        match: `${r.home} vs ${r.away}`,
-        home: r.home,
-        away: r.away,
-        kickoff: r.kickoff,
-        bet: row.label,
-        side: row.side,
-        priceAmerican: row.american,
-        priceDecimal: +row.decimal.toFixed(4),
-        book: row.book,
-        pModel: +row.pModel.toFixed(4),
-        pMarket: +row.pMarket.toFixed(4),
-        edge: +row.edge.toFixed(4),
-        ev: +row.ev.toFixed(4),
-        stake: STAKE,
-        status: "open",
-        result: null,
-        profit: null,
-        settledAt: null,
-      });
-      seen.add(id);
-      added++;
-    }
+    for (const row of r.rows) if (row.value) logRow(r, row, "h2h");
+    for (const row of r.spreadRows || []) if (row.value) logRow(r, row, "spread");
   }
 
   writeLog(log);
@@ -142,11 +143,18 @@ async function cmdGrade() {
       ag = parseInt(a.score, 10);
     if (Number.isNaN(hg) || Number.isNaN(ag)) continue;
 
-    const outcome = hg > ag ? s.home_team : hg < ag ? s.away_team : "Draw";
-    const won = norm(b.bet) === norm(outcome);
-    b.status = won ? "won" : "lost";
-    b.result = { homeGoals: hg, awayGoals: ag, outcome };
-    b.profit = won ? +((b.priceDecimal - 1) * b.stake).toFixed(4) : -b.stake;
+    let result; // "won" | "lost" | "push"
+    if (b.market === "spread") {
+      // margin from the bet side's perspective + its handicap line.
+      const margin = (b.side === "home" ? hg - ag : ag - hg) + b.line;
+      result = margin > 0 ? "won" : margin < 0 ? "lost" : "push";
+    } else {
+      const outcome = hg > ag ? s.home_team : hg < ag ? s.away_team : "Draw";
+      result = norm(b.bet) === norm(outcome) ? "won" : "lost";
+    }
+    b.status = result;
+    b.result = { homeGoals: hg, awayGoals: ag };
+    b.profit = result === "won" ? +((b.priceDecimal - 1) * b.stake).toFixed(4) : result === "push" ? 0 : -b.stake;
     b.settledAt = new Date().toISOString();
     settled++;
   }
@@ -160,7 +168,7 @@ async function cmdGrade() {
 
 function cmdReport() {
   const log = readLog();
-  const graded = log.filter((b) => b.status === "won" || b.status === "lost");
+  const graded = log.filter((b) => b.status === "won" || b.status === "lost" || b.status === "push");
   const open = log.filter((b) => b.status === "open");
 
   console.log(`\n  ═══ Bet Tracker Report ═══`);
@@ -173,14 +181,16 @@ function cmdReport() {
   }
 
   const wins = graded.filter((b) => b.status === "won").length;
-  const losses = graded.length - wins;
+  const pushes = graded.filter((b) => b.status === "push").length;
+  const losses = graded.length - wins - pushes;
   const staked = graded.reduce((s, b) => s + b.stake, 0);
   const net = graded.reduce((s, b) => s + b.profit, 0);
   const roi = net / staked;
   const avgEv = graded.reduce((s, b) => s + b.ev, 0) / graded.length;
+  const decided = wins + losses;
 
   const pct = (x) => (x * 100).toFixed(1) + "%";
-  console.log(`  Record:        ${wins}-${losses}  (${pct(wins / graded.length)} win rate)`);
+  console.log(`  Record:        ${wins}-${losses}${pushes ? `-${pushes} (push)` : ""}  (${pct(decided ? wins / decided : 0)} win rate)`);
   console.log(`  Units staked:  ${staked.toFixed(1)}`);
   console.log(`  Net profit:    ${net >= 0 ? "+" : ""}${net.toFixed(2)} units`);
   console.log(`  ROI:           ${net >= 0 ? "+" : ""}${pct(roi)}`);

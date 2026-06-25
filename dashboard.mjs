@@ -32,6 +32,9 @@ async function buildPayload(evMin) {
       row.fair = formatAmericanOdds(row.pModel);
       if (row.value) valueCount++;
     }
+    // Only surface spread lines that carry a signal (keeps the table tight).
+    r.spreadRows = (r.spreadRows || []).filter((s) => s.verdict !== "none");
+    for (const row of r.spreadRows) if (row.value) valueCount++;
     out.push(r);
   }
   out.sort((a, b) => new Date(a.kickoff) - new Date(b.kickoff));
@@ -186,10 +189,12 @@ function render(d) {
     '<span><b>'+d.remaining+'</b> API credits left</span>' +
     '<span>updated '+new Date(d.generatedAt).toLocaleTimeString()+'</span>';
 
-  // Top value-bets panel
+  // Top value-bets panel (moneyline + spreads)
   const picks = [];
-  for (const m of d.matches) for (const row of m.rows) if (row.value)
-    picks.push({...row, home:m.home, away:m.away});
+  for (const m of d.matches) {
+    for (const row of m.rows) if (row.value) picks.push({...row, home:m.home, away:m.away});
+    for (const row of (m.spreadRows||[])) if (row.value) picks.push({...row, home:m.home, away:m.away});
+  }
   picks.sort((a,b)=>b.ev-a.ev);
   document.getElementById('picks').innerHTML = picks.length ? (
     '<div class="picks"><h2>⭐ '+picks.length+' Value Bet'+(picks.length>1?'s':'')+'</h2>' +
@@ -223,6 +228,21 @@ function render(d) {
         '<td class="'+(row.ev>=0?'pos':'neg')+'">'+fmtEv(row.ev)+'</td>' +
         '<td class="team verdict '+cls+'">'+vlabel+'</td></tr>';
     }).join('') +
+    ((m.spreadRows&&m.spreadRows.length) ?
+      '<tr><td class="team" colspan="8" style="color:var(--muted);font-size:11.5px;padding-top:10px;">spreads</td></tr>' +
+      m.spreadRows.map(row => {
+        const cls = row.verdict;
+        const vlabel = cls==='value'?'✅ VALUE':'⚠ outlier';
+        return '<tr class="'+cls+'">' +
+          '<td class="team">'+row.label+'</td>' +
+          '<td>'+fmtPct(row.pModel)+'</td>' +
+          '<td>—</td>' +
+          '<td>'+fmtPct(row.pMarket)+'</td>' +
+          '<td class="price">'+sign(row.american)+'</td>' +
+          '<td class="team book">'+row.book+'</td>' +
+          '<td class="'+(row.ev>=0?'pos':'neg')+'">'+fmtEv(row.ev)+'</td>' +
+          '<td class="team verdict '+cls+'">'+vlabel+'</td></tr>';
+      }).join('') : '') +
     '</tbody></table></div>'
   ).join('') : '<div class="empty">No matches currently listed by US books.</div>';
 

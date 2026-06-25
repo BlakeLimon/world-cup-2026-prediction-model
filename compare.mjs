@@ -76,6 +76,33 @@ for (const match of matches) {
         ev: row.ev,
       });
   }
+
+  // Spreads (goal handicaps) — only show the lines with a positive-EV signal.
+  const spreadShow = (r.spreadRows || []).filter((s) => s.verdict !== "none");
+  if (spreadShow.length) {
+    console.log(`  ${"— spreads —".padStart(20)}`);
+    for (const row of spreadShow) {
+      const verdict = row.verdict === "value" ? "✅ VALUE" : "⚠ outlier";
+      console.log(
+        `  ${row.label.padEnd(16)} ` +
+          `${(row.pModel * 100).toFixed(1).padStart(5)}% ` +
+          `${"".padStart(6)} ` +
+          `${(row.pMarket * 100).toFixed(1).padStart(5)}% ` +
+          `${signSym(row.american).padStart(7)} ` +
+          `${row.book.padEnd(12)} ` +
+          `${(row.ev * 100 >= 0 ? "+" : "") + (row.ev * 100).toFixed(1) + "%"}`.padStart(7) +
+          `  ${verdict}`
+      );
+      if (row.value)
+        recommendations.push({
+          match: `${r.home} vs ${r.away}`,
+          bet: row.label,
+          price: signSym(row.american),
+          book: row.book,
+          ev: row.ev,
+        });
+    }
+  }
   shown++;
 }
 
