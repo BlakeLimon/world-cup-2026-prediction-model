@@ -47,6 +47,16 @@ const evIdx = args.indexOf("--ev");
 if (evIdx !== -1) evMin = parseFloat(args[evIdx + 1]);
 const filter = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--ev");
 
+// Trust guardrail. The backtest shows the model is well-calibrated only within
+// roughly the 15–85% range, and that huge disagreements with the sharp market
+// consensus are model error, not edge (the market is overconfident on heavy
+// favorites; longshots get overbet). So we only ACT on a value flag when the
+// market consensus is inside the validated band AND the edge is plausible.
+// Bigger disagreements are shown but labeled "⚠ outlier" — never recommended.
+const TRUST_MIN = 0.15; // consensus below this = extreme longshot, model unvalidated
+const TRUST_MAX = 0.85; // consensus above this = extreme favorite, model unvalidated
+const EDGE_CAP = 0.1; // disagreement beyond 10 pts vs consensus = treat as model error
+
 // ---- team-name matching -------------------------------------------------
 
 const { ratings } = JSON.parse(
@@ -163,8 +173,19 @@ for (const match of matches) {
     if (!samples.length || !best[o.label]) continue;
     const pMarket = samples.reduce((s, x) => s + x, 0) / samples.length;
     const b = best[o.label];
-    const { ev, value } = evaluateBet(o.pModel, pMarket, b.decimal, { evMin });
-    const verdict = value ? "✅ VALUE" : "—";
+    const { edge, ev } = evaluateBet(o.pModel, pMarket, b.decimal, { evMin });
+
+    // A flag only becomes a real recommendation if it clears EV *and* survives
+    // the trust guardrail; otherwise large +EV disagreements are model outliers.
+    const positiveEv = edge > 0 && ev >= evMin;
+    const trusted =
+      pMarket >= TRUST_MIN && pMarket <= TRUST_MAX && edge <= EDGE_CAP;
+    const value = positiveEv && trusted;
+    const verdict = value
+      ? "✅ VALUE"
+      : positiveEv
+      ? "⚠ outlier"
+      : "—";
     console.log(
       `  ${o.label.padEnd(16)} ` +
         `${(o.pModel * 100).toFixed(1).padStart(5)}% ` +
@@ -194,6 +215,10 @@ console.log("\n" + "─".repeat(70));
 console.log(
   `  legend: model=model prob · fair=model fair odds · mkt=de-vigged book consensus · ` +
     `best=best US price · EV at best price`
+);
+console.log(
+  `  ✅ VALUE = +EV and within trust band · ⚠ outlier = +EV but model disagrees too far ` +
+    `(consensus outside ${TRUST_MIN * 100}–${TRUST_MAX * 100}% or edge > ${EDGE_CAP * 100}pts) — not a bet`
 );
 console.log(`  ${shown} match(es) compared · EV threshold +${(evMin * 100).toFixed(0)}% · credits remaining: ${remaining}`);
 
