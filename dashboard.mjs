@@ -5,8 +5,15 @@
 //   node dashboard.mjs           → http://localhost:3000
 //   PORT=4000 node dashboard.mjs → custom port
 import { createServer } from "node:http";
+import { readFileSync, existsSync } from "node:fs";
 import { formatAmericanOdds } from "./elo.mjs";
 import { loadEnv, loadRatings, fetchOdds, evaluateMatch } from "./value.mjs";
+
+const LOG_PATH = new URL("./data/bet-log.json", import.meta.url);
+function readLog() {
+  if (!existsSync(LOG_PATH)) return [];
+  try { return JSON.parse(readFileSync(LOG_PATH, "utf8")); } catch { return []; }
+}
 
 loadEnv();
 const API_KEY = process.env.ODDS_API_KEY;
@@ -45,6 +52,7 @@ async function buildPayload(evMin) {
     valueCount,
     matchCount: out.length,
     matches: out,
+    logged: readLog(), // past/recorded recommendations (for days off the live feed)
     unmatched: [...unmatched],
   };
 }
@@ -141,6 +149,26 @@ const PAGE = `<!doctype html>
   .pos { color:var(--green); } .neg { color:var(--red); }
   .loading,.empty { color:var(--muted); padding:40px; text-align:center; }
   .err { color:var(--red); padding:20px; }
+  .dates { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px; }
+  .daychip { background:var(--panel); border:1px solid var(--line); color:var(--text);
+    border-radius:999px; padding:6px 14px; font-size:13px; cursor:pointer; }
+  .daychip.sel { background:var(--accent); color:#04101f; border-color:var(--accent); font-weight:600; }
+  .daychip.past { opacity:.8; }
+  .daychip .n { color:var(--muted); font-size:11px; margin-left:7px; }
+  .daychip.sel .n { color:#04101f; }
+  .logpanel { background:var(--panel); border:1px solid var(--line); border-radius:10px;
+    padding:16px 18px; margin-top:8px; }
+  .logpanel h2 { margin:0 0 12px; font-size:14px; color:var(--accent); }
+  .logrow { display:flex; align-items:center; gap:10px; padding:7px 0;
+    border-top:1px solid var(--line); font-size:13px; }
+  .logrow:first-of-type { border-top:0; }
+  .st { font-size:11px; font-weight:700; padding:2px 8px; border-radius:999px; }
+  .st.open { background:#21262d; color:var(--muted); }
+  .st.won { background:var(--greenbg); color:var(--green); }
+  .st.lost { background:#2a1416; color:var(--red); }
+  .st.push { background:var(--amberbg); color:var(--amber); }
+  .tag2 { font-size:10px; font-weight:700; padding:1px 6px; border-radius:5px;
+    background:var(--panel2); color:var(--muted); }
   footer { color:var(--muted); font-size:11.5px; padding:16px 24px; text-align:center;
     border-top:1px solid var(--line); }
 </style>
@@ -155,18 +183,25 @@ const PAGE = `<!doctype html>
   </div>
 </header>
 <main>
+  <div id="dates" class="dates"></div>
   <div id="picks"></div>
   <div id="matches"><div class="loading">Loading live odds…</div></div>
+  <div id="logged"></div>
 </main>
 <footer>
-  Fair / no-vig odds from the model · best price across US books · ⚠ outlier = model disagrees too far to trust.
-  Educational use — bet responsibly.
+  Pick a day above · live odds for upcoming days, your logged bets for past days ·
+  ⚠ outlier = model disagrees too far to trust. Educational use — bet responsibly.
 </footer>
 <script>
 const fmtPct = x => (x*100).toFixed(1)+'%';
 const sign = a => a>0 ? '+'+a : ''+a;
 const fmtEv = x => (x>=0?'+':'')+(x*100).toFixed(1)+'%';
 const when = iso => new Date(iso).toLocaleString([], {weekday:'short', month:'short', day:'numeric', hour:'numeric', minute:'2-digit'});
+const dayKey = iso => new Date(iso).toLocaleDateString();
+const dayLabel = iso => new Date(iso).toLocaleDateString([], {weekday:'short', month:'short', day:'numeric'});
+
+let DATA = null;
+let selectedDate = null;
 
 async function load() {
   const ev = (parseFloat(document.getElementById('ev').value)||0)/100;
@@ -176,28 +211,105 @@ async function load() {
     const r = await fetch('/api/value?ev='+ev);
     const d = await r.json();
     if (d.error) throw new Error(d.error);
-    render(d);
+    DATA = d;
+    renderMeta();
+    renderDates();
+    renderDay();
   } catch(e) {
     document.getElementById('matches').innerHTML = '<div class="err">Error: '+e.message+'</div>';
   } finally { btn.disabled = false; }
 }
 
-function render(d) {
+function renderMeta() {
   document.getElementById('meta').innerHTML =
-    '<span><b>'+d.matchCount+'</b> matches</span>' +
-    '<span><b>'+d.valueCount+'</b> value bets</span>' +
-    '<span><b>'+d.remaining+'</b> API credits left</span>' +
-    '<span>updated '+new Date(d.generatedAt).toLocaleTimeString()+'</span>';
+    '<span><b>'+DATA.matchCount+'</b> live matches</span>' +
+    '<span><b>'+DATA.valueCount+'</b> value bets</span>' +
+    '<span><b>'+DATA.remaining+'</b> credits</span>' +
+    '<span>updated '+new Date(DATA.generatedAt).toLocaleTimeString()+'</span>';
+}
 
-  // Top value-bets panel (moneyline + spreads)
+// Union of days from live matches + logged bets, ascending.
+function allDates() {
+  const m = new Map();
+  for (const x of DATA.matches) m.set(dayKey(x.kickoff), x.kickoff);
+  for (const b of (DATA.logged||[])) m.set(dayKey(b.kickoff), b.kickoff);
+  return [...m.entries()].sort((a,b)=> new Date(a[1]) - new Date(b[1]));
+}
+const liveOn = key => DATA.matches.filter(m=>dayKey(m.kickoff)===key);
+const loggedOn = key => (DATA.logged||[]).filter(b=>dayKey(b.kickoff)===key);
+
+function renderDates() {
+  const dates = allDates();
+  const keys = dates.map(d=>d[0]);
+  if (!selectedDate || !keys.includes(selectedDate)) {
+    const firstLive = dates.find(([k])=> liveOn(k).length);
+    selectedDate = (firstLive || dates[0] || [null])[0];
+  }
+  document.getElementById('dates').innerHTML = dates.map(([k,iso])=>{
+    const live = liveOn(k).length;
+    let v = 0; for (const mm of liveOn(k)) { for (const r of mm.rows) if (r.value) v++; for (const r of (mm.spreadRows||[])) if (r.value) v++; }
+    const n = live ? (v+' VB') : (loggedOn(k).length+' logged');
+    return '<button class="daychip'+(k===selectedDate?' sel':'')+(live?'':' past')+'" data-k="'+k+'">'+dayLabel(iso)+'<span class="n">'+n+'</span></button>';
+  }).join('') || '<span class="empty">No days available.</span>';
+  document.querySelectorAll('.daychip').forEach(el =>
+    el.addEventListener('click', () => { selectedDate = el.dataset.k; renderDates(); renderDay(); }));
+}
+
+function matchTable(m) {
+  const row = (r, isSpread) => {
+    const cls = r.verdict;
+    const vlabel = cls==='value'?'✅ VALUE':cls==='outlier'?'⚠ outlier':'—';
+    return '<tr class="'+cls+'">' +
+      '<td class="team">'+r.label+'</td>' +
+      '<td>'+fmtPct(r.pModel)+(isSpread?'':' <span class="bar" style="width:'+(r.pModel*42).toFixed(0)+'px"></span>')+'</td>' +
+      '<td>'+(isSpread?'—':r.fair)+'</td>' +
+      '<td>'+fmtPct(r.pMarket)+'</td>' +
+      '<td class="price">'+sign(r.american)+'</td>' +
+      '<td class="team book">'+r.book+'</td>' +
+      '<td class="'+(r.ev>=0?'pos':'neg')+'">'+fmtEv(r.ev)+'</td>' +
+      '<td class="team verdict '+cls+'">'+vlabel+'</td></tr>';
+  };
+  return '<div class="match"><h3><span>'+m.home+' vs '+m.away+'</span>' +
+    '<span class="when">'+when(m.kickoff)+' · '+m.bookCount+' books</span></h3>' +
+    '<table><thead><tr>' +
+    '<th class="team">Outcome</th><th>Model</th><th>Fair</th><th>Market</th>' +
+    '<th>Best</th><th class="team">Book</th><th>EV</th><th class="team">Verdict</th>' +
+    '</tr></thead><tbody>' +
+    m.rows.map(r=>row(r,false)).join('') +
+    ((m.spreadRows&&m.spreadRows.length) ?
+      '<tr><td class="team" colspan="8" style="color:var(--muted);font-size:11.5px;padding-top:10px;">spreads</td></tr>' +
+      m.spreadRows.map(r=>row(r,true)).join('') : '') +
+    '</tbody></table></div>';
+}
+
+function loggedPanel(logged) {
+  const rows = logged.slice().sort((a,b)=>(b.ev||0)-(a.ev||0)).map(b=>{
+    const st = b.status||'open';
+    const res = b.result ? ' · '+b.home+' '+b.result.homeGoals+'-'+b.result.awayGoals+' '+b.away : '';
+    return '<div class="logrow">' +
+      '<span class="st '+st+'">'+st.toUpperCase()+'</span>' +
+      '<span class="tag2">'+(b.market==='spread'?'SPR':'ML')+'</span>' +
+      '<span class="bet" style="min-width:120px;font-weight:600;">'+b.bet+'</span>' +
+      '<span class="vs" style="flex:1;color:var(--muted);">'+b.match+res+'</span>' +
+      '<span class="price">'+sign(b.priceAmerican)+'</span>' +
+      '<span class="book">'+b.book+'</span>' +
+      '<span class="pill ev">'+fmtEv(b.ev||0)+'</span></div>';
+  }).join('');
+  return '<div class="logpanel"><h2>Logged recommendations · '+logged.length+'</h2>'+rows+'</div>';
+}
+
+function renderDay() {
+  const live = liveOn(selectedDate);
+  const logged = loggedOn(selectedDate);
+
   const picks = [];
-  for (const m of d.matches) {
-    for (const row of m.rows) if (row.value) picks.push({...row, home:m.home, away:m.away});
-    for (const row of (m.spreadRows||[])) if (row.value) picks.push({...row, home:m.home, away:m.away});
+  for (const m of live) {
+    for (const r of m.rows) if (r.value) picks.push({...r, home:m.home, away:m.away});
+    for (const r of (m.spreadRows||[])) if (r.value) picks.push({...r, home:m.home, away:m.away});
   }
   picks.sort((a,b)=>b.ev-a.ev);
   document.getElementById('picks').innerHTML = picks.length ? (
-    '<div class="picks"><h2>⭐ '+picks.length+' Value Bet'+(picks.length>1?'s':'')+'</h2>' +
+    '<div class="picks"><h2>⭐ '+picks.length+' value bet'+(picks.length>1?'s':'')+' · '+dayLabel(live[0].kickoff)+'</h2>' +
     picks.map(p =>
       '<div class="pick"><span class="bet">'+p.label+'</span>' +
       '<span class="vs">'+p.home+' vs '+p.away+'</span>' +
@@ -207,48 +319,14 @@ function render(d) {
     ).join('') + '</div>'
   ) : '';
 
-  // Per-match tables
-  document.getElementById('matches').innerHTML = d.matches.length ? d.matches.map(m =>
-    '<div class="match"><h3><span>'+m.home+' vs '+m.away+'</span>' +
-    '<span class="when">'+when(m.kickoff)+' · '+m.bookCount+' books</span></h3>' +
-    '<table><thead><tr>' +
-    '<th class="team">Outcome</th><th>Model</th><th>Fair</th><th>Market</th>' +
-    '<th>Best</th><th class="team">Book</th><th>EV</th><th class="team">Verdict</th>' +
-    '</tr></thead><tbody>' +
-    m.rows.map(row => {
-      const cls = row.verdict;
-      const vlabel = cls==='value'?'✅ VALUE':cls==='outlier'?'⚠ outlier':'—';
-      return '<tr class="'+cls+'">' +
-        '<td class="team">'+row.label+'</td>' +
-        '<td>'+fmtPct(row.pModel)+' <span class="bar" style="width:'+(row.pModel*42).toFixed(0)+'px"></span></td>' +
-        '<td>'+row.fair+'</td>' +
-        '<td>'+fmtPct(row.pMarket)+'</td>' +
-        '<td class="price">'+sign(row.american)+'</td>' +
-        '<td class="team book">'+row.book+'</td>' +
-        '<td class="'+(row.ev>=0?'pos':'neg')+'">'+fmtEv(row.ev)+'</td>' +
-        '<td class="team verdict '+cls+'">'+vlabel+'</td></tr>';
-    }).join('') +
-    ((m.spreadRows&&m.spreadRows.length) ?
-      '<tr><td class="team" colspan="8" style="color:var(--muted);font-size:11.5px;padding-top:10px;">spreads</td></tr>' +
-      m.spreadRows.map(row => {
-        const cls = row.verdict;
-        const vlabel = cls==='value'?'✅ VALUE':'⚠ outlier';
-        return '<tr class="'+cls+'">' +
-          '<td class="team">'+row.label+'</td>' +
-          '<td>'+fmtPct(row.pModel)+'</td>' +
-          '<td>—</td>' +
-          '<td>'+fmtPct(row.pMarket)+'</td>' +
-          '<td class="price">'+sign(row.american)+'</td>' +
-          '<td class="team book">'+row.book+'</td>' +
-          '<td class="'+(row.ev>=0?'pos':'neg')+'">'+fmtEv(row.ev)+'</td>' +
-          '<td class="team verdict '+cls+'">'+vlabel+'</td></tr>';
-      }).join('') : '') +
-    '</tbody></table></div>'
-  ).join('') : '<div class="empty">No matches currently listed by US books.</div>';
+  document.getElementById('matches').innerHTML = live.length
+    ? live.map(matchTable).join('')
+    : (logged.length ? '' : '<div class="empty">No live matches for this day.</div>');
+  document.getElementById('logged').innerHTML = logged.length ? loggedPanel(logged) : '';
 
-  if (d.unmatched.length)
+  if (live.length && DATA.unmatched && DATA.unmatched.length)
     document.getElementById('matches').innerHTML +=
-      '<div class="err">⚠ Unmatched teams (add to ALIAS in value.mjs): '+d.unmatched.join(', ')+'</div>';
+      '<div class="err">⚠ Unmatched teams (add to ALIAS in value.mjs): '+DATA.unmatched.join(', ')+'</div>';
 }
 
 document.getElementById('refresh').addEventListener('click', load);
