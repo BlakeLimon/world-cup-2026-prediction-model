@@ -57,6 +57,26 @@ export function matchProb(ratingA, ratingB, homeBonusA = 0) {
   return { winA: winA / total, draw: draw / total, winB: winB / total, expectedGoalsA: lambda, expectedGoalsB: mu };
 }
 
+// Convert a fair probability (0–1) to American moneyline odds.
+// Favorites (p > 0.5) come out negative ("lay $X to win $100"); underdogs
+// positive ("$100 wins $X"). NOTE: these are no-vig "fair" odds derived
+// straight from the model probability — real sportsbooks bake in a margin,
+// so their posted lines will be a little worse than these. Use these to
+// judge whether a book's price offers value.
+export function toAmericanOdds(p) {
+  if (p <= 0) return Infinity;
+  if (p >= 1) return -Infinity;
+  return p > 0.5 ? (-100 * p) / (1 - p) : (100 * (1 - p)) / p;
+}
+
+// Format American odds for display: leading +/- sign, rounded to a whole number.
+export function formatAmericanOdds(p) {
+  const o = toAmericanOdds(p);
+  if (!Number.isFinite(o)) return o > 0 ? "+∞" : "-∞";
+  const r = Math.round(o);
+  return (r > 0 ? "+" : "") + r;
+}
+
 // Sample a scoreline (for Monte Carlo). allowDraw=false → penalty shootout nudge toward higher Elo.
 export function sampleMatch(ratingA, ratingB, homeBonusA = 0, allowDraw = true, rng = Math.random) {
   const eA = expectedGoals(ratingA, ratingB, homeBonusA);
