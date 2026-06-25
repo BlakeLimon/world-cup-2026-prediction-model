@@ -1,0 +1,21 @@
+{
+  "_comment": "2026 World Cup host venues. altitudeM = stadium elevation in metres (the model only treats >1200m as meaningful). Coordinates used for travel distance and weather lookups.",
+  "venues": {
+    "mexico city":     { "stadium": "Estadio Azteca",        "country": "mexico", "lat": 19.303, "lng": -99.150, "altitudeM": 2200 },
+    "guadalajara":     { "stadium": "Estadio Akron",         "country": "mexico", "lat": 20.682, "lng": -103.463, "altitudeM": 1566 },
+    "monterrey":       { "stadium": "Estadio BBVA",          "country": "mexico", "lat": 25.669, "lng": -100.244, "altitudeM": 500 },
+    "atlanta":         { "stadium": "Mercedes-Benz Stadium", "country": "usa", "lat": 33.755, "lng": -84.401, "altitudeM": 320 },
+    "boston":          { "stadium": "Gillette Stadium",      "country": "usa", "lat": 42.091, "lng": -71.264, "altitudeM": 90 },
+    "dallas":          { "stadium": "AT&T Stadium",          "country": "usa", "lat": 32.747, "lng": -97.093, "altitudeM": 150 },
+    "houston":         { "stadium": "NRG Stadium",           "country": "usa", "lat": 29.685, "lng": -95.411, "altitudeM": 15 },
+    "kansas city":     { "stadium": "Arrowhead Stadium",     "country": "usa", "lat": 39.049, "lng": -94.484, "altitudeM": 270 },
+    "los angeles":     { "stadium": "SoFi Stadium",          "country": "usa", "lat": 33.953, "lng": -118.339, "altitudeM": 30 },
+    "miami":           { "stadium": "Hard Rock Stadium",     "country": "usa", "lat": 25.958, "lng": -80.239, "altitudeM": 2 },
+    "new york":        { "stadium": "MetLife Stadium",       "country": "usa", "lat": 40.814, "lng": -74.074, "altitudeM": 3 },
+    "philadelphia":    { "stadium": "Lincoln Financial Field","country": "usa", "lat": 39.901, "lng": -75.168, "altitudeM": 12 },
+    "san francisco":   { "stadium": "Levi's Stadium",        "country": "usa", "lat": 37.403, "lng": -121.969, "altitudeM": 4 },
+    "seattle":         { "stadium": "Lumen Field",           "country": "usa", "lat": 47.595, "lng": -122.332, "altitudeM": 5 },
+    "toronto":         { "stadium": "BMO Field",             "country": "canada", "lat": 43.633, "lng": -79.418, "altitudeM": 76 },
+    "vancouver":       { "stadium": "BC Place",              "country": "canada", "lat": 49.277, "lng": -123.112, "altitudeM": 0 }
+  }
+}

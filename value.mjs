@@ -9,6 +9,7 @@ import {
   devig,
   evaluateBet,
 } from "./oddsmath.mjs";
+import { HOSTS, HOST_BONUS } from "./adjustments.mjs";
 
 export const SPORT = "soccer_fifa_world_cup";
 
@@ -103,7 +104,10 @@ export function evaluateMatch(match, ratings, { evMin = 0.02, unmatched } = {}) 
   if (!awayKey && unmatched) unmatched.add(away_team);
   if (!homeKey || !awayKey) return null;
 
-  const p = matchProb(ratings[homeKey], ratings[awayKey], 0);
+  // Host advantage: a host nation listed as home is assumed to be playing in
+  // its own country (venue isn't in the odds feed). No-op for everyone else.
+  const homeBonus = HOSTS.has(homeKey) ? HOST_BONUS : 0;
+  const p = matchProb(ratings[homeKey], ratings[awayKey], homeBonus);
   const outcomes = [
     { label: home_team, side: "home", pModel: p.winA },
     { label: "Draw", side: "draw", pModel: p.draw },
@@ -157,7 +161,7 @@ export function evaluateMatch(match, ratings, { evMin = 0.02, unmatched } = {}) 
     });
   }
 
-  const { matrix } = scoreMatrix(ratings[homeKey], ratings[awayKey], 0);
+  const { matrix } = scoreMatrix(ratings[homeKey], ratings[awayKey], homeBonus);
   const spreadRows = evaluateSpreads(matrix, home_team, away_team, bookmakers, evMin);
 
   return {
