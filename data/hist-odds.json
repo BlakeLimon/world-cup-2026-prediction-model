@@ -1,0 +1,54 @@
+{
+  "_comment": "Manually transcribed pre-game odds + final scores from Action Network. Per-book arrays are [home, away, draw] in American odds. Used by histbacktest.mjs to backtest the value engine against real closing lines.",
+  "games": [
+    {
+      "date": "2026-06-23",
+      "home": "Uzbekistan", "away": "Portugal", "hg": 0, "ag": 5,
+      "books": {
+        "bet365":    [1800, -800, 800],
+        "Fanatics":  [1300, -475, 520],
+        "BetMGM":    [1700, -700, 800],
+        "BetRivers": [2000, -770, 750],
+        "DraftKings":[1800, -700, 750],
+        "FanDuel":   [1800, -900, 700]
+      }
+    },
+    {
+      "date": "2026-06-23",
+      "home": "Ghana", "away": "England", "hg": 0, "ag": 0,
+      "books": {
+        "bet365":    [1400, -550, 650],
+        "Fanatics":  [850, -300, 400],
+        "BetMGM":    [1300, -525, 625],
+        "BetRivers": [1700, -625, 700],
+        "DraftKings":[1500, -550, 650],
+        "FanDuel":   [1900, -650, 600]
+      }
+    },
+    {
+      "date": "2026-06-23",
+      "home": "Croatia", "away": "Panama", "hg": 1, "ag": 0,
+      "books": {
+        "bet365":    [-239, 650, 360],
+        "Fanatics":  [-220, 640, 320],
+        "BetMGM":    [-235, 675, 340],
+        "BetRivers": [-235, 700, 340],
+        "DraftKings":[-230, 700, 360],
+        "FanDuel":   [-250, 700, 360]
+      }
+    },
+    {
+      "date": "2026-06-23",
+      "home": "DR Congo", "away": "Colombia", "hg": 0, "ag": 1,
+      "books": {
+        "bet365":    [600, -188, 290],
+        "Fanatics":  [610, -200, 295],
+        "BetMGM":    [550, -190, 300],
+        "Caesars":   [650, -210, 300],
+        "BetRivers": [600, -190, 290],
+        "DraftKings":[650, -195, 300],
+        "FanDuel":   [600, -195, 290]
+      }
+    }
+  ]
+}

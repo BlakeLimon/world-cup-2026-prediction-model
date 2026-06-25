@@ -34,6 +34,7 @@ const filter = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--ev"
 
 const ratings = loadRatings();
 const { matches, remaining } = await fetchOdds({ apiKey: API_KEY, regions: REGIONS });
+matches.sort((a, b) => new Date(a.commence_time) - new Date(b.commence_time));
 
 const signSym = (a) => (a > 0 ? "+" + a : "" + a);
 const unmatched = new Set();

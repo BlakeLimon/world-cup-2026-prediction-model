@@ -6,7 +6,9 @@
   "scripts": {
     "calibrate": "node calibrate.mjs",
     "backtest": "node backtest.mjs",
-    "predict": "node predict.mjs"
+    "predict": "node predict.mjs",
+    "compare": "node compare.mjs",
+    "dashboard": "node dashboard.mjs"
   },
   "keywords": [
     "world-cup-2026", "fifa", "football", "soccer", "predictions", "elo",
