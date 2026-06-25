@@ -113,7 +113,7 @@ export function evaluateMatch(match, ratings, { evMin = 0.02, unmatched } = {}) 
   if (!homeKey || !awayKey) return null;
 
   // Resolve venue (if mapped) and apply situational adjustments (host, altitude).
-  const venueCity = FIXTURES[`${homeKey}|${awayKey}`] || null;
+  const venueCity = FIXTURES[`${homeKey}|${awayKey}`] || FIXTURES[`${awayKey}|${homeKey}`] || null;
   const venue = venueCity ? venueOf(venueCity) : null;
   const adj = matchAdjustments({ homeKey, awayKey, venue });
   const rA = ratings[homeKey] + adj.adjHome;

@@ -37,9 +37,13 @@ export function matchAdjustments({ homeKey, awayKey, venue = null, restHome = nu
   let adjHome = 0, adjAway = 0;
   const notes = [];
 
-  // Host advantage — only if the host nation is actually playing in its country
-  // (or venue unknown, in which case we assume the listed home host is at home).
-  if (HOSTS.has(homeKey) && (!venue || venue.country === homeKey)) {
+  // Host advantage — goes to the host nation playing in its own country,
+  // regardless of which side the feed lists as "home" (neutral-site tournament).
+  // With no venue, fall back to assuming a listed home host is at home.
+  if (venue) {
+    if (venue.country === homeKey) { adjHome += HOST_BONUS; notes.push(`host +${HOST_BONUS} (${homeKey})`); }
+    else if (venue.country === awayKey) { adjAway += HOST_BONUS; notes.push(`host +${HOST_BONUS} (${awayKey})`); }
+  } else if (HOSTS.has(homeKey)) {
     adjHome += HOST_BONUS;
     notes.push(`host +${HOST_BONUS} (${homeKey})`);
   }

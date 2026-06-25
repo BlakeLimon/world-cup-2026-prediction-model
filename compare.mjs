@@ -56,6 +56,7 @@ for (const match of matches) {
   const kickoff = new Date(r.kickoff).toLocaleString();
   const venueStr = r.venue ? ` @ ${r.venue.stadium}` : "";
   console.log(`\n  ${r.home} vs ${r.away}${venueStr}   (${kickoff}, ${r.bookCount} US books)`);
+  if (r.adjustmentNotes && r.adjustmentNotes.length) console.log(`  adjustments: ${r.adjustmentNotes.join(" · ")}`);
   console.log(
     `  ${"outcome".padEnd(16)} ${"model".padStart(6)} ${"fair".padStart(6)} ` +
       `${"mkt".padStart(6)} ${"best".padStart(7)} ${"book".padEnd(12)} ${"EV".padStart(7)}  verdict`

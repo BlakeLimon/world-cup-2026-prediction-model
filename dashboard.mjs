@@ -269,8 +269,9 @@ function matchTable(m) {
       '<td class="team verdict '+cls+'">'+vlabel+'</td></tr>';
   };
   const venueStr = m.venue ? ' · '+m.venue.stadium+(m.venue.altitudeM>1200?' ('+m.venue.altitudeM+'m)':'') : '';
+  const adjStr = (m.adjustmentNotes && m.adjustmentNotes.length) ? '<div style="padding:6px 16px;font-size:11.5px;color:var(--amber);">'+m.adjustmentNotes.join(' · ')+'</div>' : '';
   return '<div class="match"><h3><span>'+m.home+' vs '+m.away+'</span>' +
-    '<span class="when">'+when(m.kickoff)+venueStr+' · '+m.bookCount+' books</span></h3>' +
+    '<span class="when">'+when(m.kickoff)+venueStr+' · '+m.bookCount+' books</span></h3>' + adjStr +
     '<table><thead><tr>' +
     '<th class="team">Outcome</th><th>Model</th><th>Fair</th><th>Market</th>' +
     '<th>Best</th><th class="team">Book</th><th>EV</th><th class="team">Verdict</th>' +
