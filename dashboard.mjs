@@ -38,6 +38,7 @@ async function buildPayload(evMin) {
     for (const row of r.rows) row.fair = formatAmericanOdds(row.pModel);
     // Only surface spread lines that carry a signal (keeps the table tight).
     r.spreadRows = (r.spreadRows || []).filter((s) => s.verdict !== "none");
+    for (const row of r.spreadRows) row.fair = formatAmericanOdds(row.pModel);
     valueCount += r.recommendations.length; // deduped: one bet per side
     out.push(r);
   }
@@ -261,7 +262,7 @@ function matchTable(m) {
     return '<tr class="'+cls+'">' +
       '<td class="team">'+r.label+'</td>' +
       '<td>'+fmtPct(r.pModel)+(isSpread?'':' <span class="bar" style="width:'+(r.pModel*42).toFixed(0)+'px"></span>')+'</td>' +
-      '<td>'+(isSpread?'—':r.fair)+'</td>' +
+      '<td>'+r.fair+'</td>' +
       '<td>'+fmtPct(r.pMarket)+'</td>' +
       '<td class="price">'+sign(r.american)+'</td>' +
       '<td class="team book">'+r.book+'</td>' +

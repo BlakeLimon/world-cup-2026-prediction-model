@@ -2,7 +2,7 @@
 // consensus, and evaluate each outcome for value with the trust guardrail.
 // Used by both compare.mjs (display) and track.mjs (logging/grading).
 import { readFileSync } from "node:fs";
-import { matchProb, scoreMatrix, spreadProb } from "./elo.mjs";
+import { matchProb, scoreMatrix, asianHandicap } from "./elo.mjs";
 import {
   americanToDecimal,
   americanToImpliedProb,
@@ -69,6 +69,8 @@ const ALIAS = {
   turkiye: "turkey",
   "congo-dr": "dr-congo",
   "democratic-republic-of-the-congo": "dr-congo",
+  "bosnia-herzegovina": "bosnia-and-herzegovina", // feed uses "Bosnia & Herzegovina"
+  "trinidad-tobago": "trinidad-and-tobago", // same "&" → dropped "and" pattern
 };
 
 export function resolveTeam(name, ratings) {
@@ -220,13 +222,13 @@ function evaluateSpreads(matrix, homeTeam, awayTeam, bookmakers, evMin) {
     if (!ho || !ao || ho.point == null) continue;
 
     const hp = ho.point; // home handicap line
-    const sp = spreadProb(matrix, hp);
+    const h = asianHandicap(matrix, hp); // HOME-side { cover, push, lose }
     const ih = americanToImpliedProb(ho.price), ia = americanToImpliedProb(ao.price);
     const fairHome = ih / (ih + ia), fairAway = ia / (ih + ia);
 
     const sides = [
-      { side: "home", label: `${homeTeam} ${fmtLine(hp)}`, line: hp, price: ho.price, pWin: sp.homeCover, pLose: sp.awayCover, fair: fairHome },
-      { side: "away", label: `${awayTeam} ${fmtLine(-hp)}`, line: -hp, price: ao.price, pWin: sp.awayCover, pLose: sp.homeCover, fair: fairAway },
+      { side: "home", label: `${homeTeam} ${fmtLine(hp)}`, line: hp, price: ho.price, pWin: h.cover, pLose: h.lose, fair: fairHome },
+      { side: "away", label: `${awayTeam} ${fmtLine(-hp)}`, line: -hp, price: ao.price, pWin: h.lose, pLose: h.cover, fair: fairAway },
     ];
     for (const s of sides) {
       const decimal = americanToDecimal(s.price);
@@ -238,7 +240,7 @@ function evaluateSpreads(matrix, homeTeam, awayTeam, bookmakers, evMin) {
       const value = positiveEv && trusted;
       const cand = {
         market: "spread", side: s.side, label: s.label, line: s.line,
-        pModel: pAdj, pMarket: s.fair, push: sp.push,
+        pModel: pAdj, pMarket: s.fair, push: h.push,
         american: s.price, decimal, book: bk.title,
         edge, ev, value, verdict: value ? "value" : positiveEv ? "outlier" : "none",
       };

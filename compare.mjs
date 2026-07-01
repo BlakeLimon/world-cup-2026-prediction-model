@@ -81,7 +81,7 @@ for (const match of matches) {
       console.log(
         `  ${row.label.padEnd(16)} ` +
           `${(row.pModel * 100).toFixed(1).padStart(5)}% ` +
-          `${"".padStart(6)} ` +
+          `${formatAmericanOdds(row.pModel).padStart(6)} ` +
           `${(row.pMarket * 100).toFixed(1).padStart(5)}% ` +
           `${signSym(row.american).padStart(7)} ` +
           `${row.book.padEnd(12)} ` +

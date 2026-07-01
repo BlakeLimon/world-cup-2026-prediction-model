@@ -122,6 +122,29 @@ export function spreadProb(matrix, homeLine) {
   return { homeCover, push, awayCover };
 }
 
+// Asian handicap result for the HOME side at handicap `hp`, returning
+// { cover, push, lose } probabilities. Quarter lines (.25 / .75) are SPLIT
+// into the two adjacent whole/half lines (half stake each) and averaged — so
+// +0.25 prices strictly between +0.0 and +0.5, never identical to either.
+export function asianHandicap(matrix, hp) {
+  const single = (line) => {
+    let cover = 0, push = 0, lose = 0;
+    for (let a = 0; a < matrix.length; a++)
+      for (let b = 0; b < matrix.length; b++) {
+        const m = a - b + line, p = matrix[a][b];
+        if (m > 0) cover += p; else if (m < 0) lose += p; else push += p;
+      }
+    return { cover, push, lose };
+  };
+  if (Math.abs((hp * 2) % 1) < 1e-9) return single(hp); // whole or half line
+  const lo = single(hp - 0.25), hi = single(hp + 0.25); // quarter → average the split
+  return {
+    cover: (lo.cover + hi.cover) / 2,
+    push: (lo.push + hi.push) / 2,
+    lose: (lo.lose + hi.lose) / 2,
+  };
+}
+
 // Both teams to score.
 export function bttsProb(matrix) {
   let yes = 0;
